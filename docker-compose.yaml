@@ -1,0 +1,26 @@
+services:
+  ollama:
+    image: ollama/ollama:0.6.6
+    container_name: ollama
+    volumes:
+      - ./etc/ollama/ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_KEEP_ALIVE=24h
+    entrypoint: >
+      /bin/sh -c "
+        (nohup ollama serve &) &&
+        sleep 5 &&
+        ollama pull qwen2.5:0.5b &&
+        tail -f /dev/null
+      "
+    restart: unless-stopped
+
+
+# curl -X POST http://localhost:11434/api/generate -d '{
+#   "model": "qwen2.5:0.5b",
+#   "prompt": "Hello, can you introduce yourself?",
+#   "stream": false
+# }'
