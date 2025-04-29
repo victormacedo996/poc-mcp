@@ -17,7 +17,7 @@ class OllamaModelProvider(BaseLLMProvider):
         response = requests.post(
             url="http://localhost:11434/api/generate",
             json={
-                "model": "qwen2.5:0.5b",
+                "model": "llama3.2:3b",
                 "prompt": prompt,
                 "stream": stream
             },

@@ -20,7 +20,7 @@ When a user asks a question, follow these steps:
 
 1. **Analyze** the user’s request.  
 2. **Decide**:
-- If the question requires external data or actions beyond your training (e.g. live weather, database lookup, computation), choose exactly one tool from the above list.
+- If the question requires external data or actions beyond your training (e.g. database lookup, computation), choose exactly one tool from the above list.
 - Otherwise, plan to answer directly without calling any tool.
 
 3. **Output** **strictly** one ARRAY containing JSON OBJECTS (no extra text) in one of these forms:
@@ -29,6 +29,10 @@ When a user asks a question, follow these steps:
 [
   { "name": <tool_name>, "arguments": { … } }
 ]
+
+You also have the option to do not call any tool, in which case you should return an empty array without any empty object inside it:
+
+[]
 
 User’s question begins below.
 
@@ -75,21 +79,21 @@ async def chat(chat_request: ChatRequest) -> StreamingResponse:
     tools_prompt = Template(TOOL_PROMPT).substitute(tools=tools, user_question=chat_request.prompt)
     async def event_stream():
         model_response = model.call_model(tools_prompt, stream=False)
-        tools_2_call = json.loads(model_response)
+        print(model_response)
         tools_results = list()
-        for tool in tools_2_call:
-            yield f"Calling Tool: {tool['name']} with arguments {tool['arguments']}\n"
-            tool_call_result = await call_mcp_tool("http://localhost:8000/sse", tool['name'], **tool['arguments'])
-            tools_results.append(tool_call_result[0].model_dump())
+        tools_2_call = json.loads(model_response)
+        if not all(isinstance(elem, dict) and not elem for elem in tools_2_call):
+            for tool in tools_2_call:
+                yield f"Calling Tool: {tool['name']} with arguments {tool['arguments']}\n"
+                tool_call_result = await call_mcp_tool("http://localhost:8000/sse", tool['name'], **tool['arguments'])
+                tools_results.append(tool_call_result[0].model_dump())
         
         yield f"Calling expert model\n"
         str_tools_results = "\n".join([str(tool) for tool in tools_results])
-        print(str_tools_results)
         for chunk in model.call_model(Template(FINAL_PROMPT).substitute(user_question=chat_request.prompt, mcp_tool_outputs_json=str_tools_results), stream=True):
             yield chunk
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")  
-
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 @router.post("/chat")
 async def chat(chat_request: ChatRequest) -> dict:
