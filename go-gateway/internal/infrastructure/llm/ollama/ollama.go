@@ -75,6 +75,28 @@ func (o *Ollama) AsyncChat(prompt string) (<-chan string, <-chan error) {
 	return out_chan, err_chan
 }
 
-func (o *Ollama) SyncChat() {
+func (o *Ollama) SyncChat(prompt string) (string, error) {
 
+	fmt.Println(o.OllamaConfig.Model)
+	fmt.Println(prompt)
+	resp, err := http.Post("http://localhost:11434/api/generate",
+		"application/json",
+		bytes.NewBuffer([]byte(fmt.Sprintf(`{"model":"%s","prompt":"%s","stream":false}`, o.OllamaConfig.Model, prompt))),
+	)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to call llm")
+	}
+
+	var generated_response GenerateResponse
+
+	err = json.NewDecoder(bufio.NewReader(resp.Body)).Decode(&generated_response)
+	if err != nil {
+		return "", err
+	}
+
+	return generated_response.Response, nil
 }
