@@ -9,7 +9,6 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/victormacedo996/poc-mcp/internal/config"
 	"github.com/victormacedo996/poc-mcp/internal/domain/usecase"
-	"github.com/victormacedo996/poc-mcp/internal/infrastructure/mcp"
 	"github.com/victormacedo996/poc-mcp/internal/webserver/rest/frameworks/chi/controllers"
 	v1Controller "github.com/victormacedo996/poc-mcp/internal/webserver/rest/frameworks/chi/controllers/v1"
 	v1Health "github.com/victormacedo996/poc-mcp/internal/webserver/rest/frameworks/chi/router/routes/v1/health"
@@ -29,8 +28,8 @@ func NewRouter(webConfig config.WebServer) *Router {
 	}
 }
 
-func (r *Router) Start(llm_interaction_uc *usecase.LlmInteraction, mcp mcp.Mcp) {
-	ctls := controllers.GetControllersInstance(llm_interaction_uc, mcp)
+func (r *Router) Start(llm_interaction_uc *usecase.LlmInteraction) {
+	ctls := controllers.GetControllersInstance(llm_interaction_uc)
 	r.configureRouter()
 	r.setUpRoutes(ctls)
 

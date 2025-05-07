@@ -77,25 +77,36 @@ func (o *Ollama) AsyncChat(prompt string) (<-chan string, <-chan error) {
 
 func (o *Ollama) SyncChat(prompt string) (string, error) {
 
-	fmt.Println(o.OllamaConfig.Model)
-	fmt.Println(prompt)
-	resp, err := http.Post("http://localhost:11434/api/generate",
+	payload := GenerateRequest{
+		Model:  o.OllamaConfig.Model,
+		Prompt: prompt,
+		Stream: false,
+	}
+
+	buf := new(bytes.Buffer)
+	enc := json.NewEncoder(buf)
+	if err := enc.Encode(payload); err != nil {
+		return "", fmt.Errorf("error encoding payload: %w", err)
+
+	}
+
+	resp, err := http.Post(fmt.Sprintf("%s/api/generate", o.OllamaConfig.Endpoint),
 		"application/json",
-		bytes.NewBuffer([]byte(fmt.Sprintf(`{"model":"%s","prompt":"%s","stream":false}`, o.OllamaConfig.Model, prompt))),
+		buf,
 	)
 	if err != nil {
 		return "", err
 	}
+	defer resp.Body.Close()
 
+	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to call llm")
+		return "", fmt.Errorf("Ollama error: %s", string(body))
 	}
-
 	var generated_response GenerateResponse
 
-	err = json.NewDecoder(bufio.NewReader(resp.Body)).Decode(&generated_response)
-	if err != nil {
-		return "", err
+	if err := json.Unmarshal(body, &generated_response); err != nil {
+		return "", fmt.Errorf("error decoding llm response: %w", err)
 	}
 
 	return generated_response.Response, nil

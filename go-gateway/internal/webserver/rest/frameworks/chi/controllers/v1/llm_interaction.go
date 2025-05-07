@@ -2,6 +2,7 @@ package v1Controller
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -9,24 +10,22 @@ import (
 	"github.com/victormacedo996/poc-mcp/internal/config"
 	"github.com/victormacedo996/poc-mcp/internal/domain/usecase"
 	"github.com/victormacedo996/poc-mcp/internal/infrastructure/llm/ollama"
-	"github.com/victormacedo996/poc-mcp/internal/infrastructure/mcp"
+	mcpgo "github.com/victormacedo996/poc-mcp/internal/infrastructure/mcp/mcp-go"
 	jsonResponse "github.com/victormacedo996/poc-mcp/internal/webserver/rest/frameworks/chi/http_response/json"
 )
 
 type LlmInteractionController struct {
 	Usecase *usecase.LlmInteraction
-	Mcp     mcp.Mcp
 }
 
 var mcp_once sync.Once
 var mcp_controller *LlmInteractionController
 
-func GetLlmInteractionController(usecase *usecase.LlmInteraction, mcp mcp.Mcp) *LlmInteractionController {
+func GetLlmInteractionController(usecase *usecase.LlmInteraction) *LlmInteractionController {
 	if mcp_controller == nil {
 		mcp_once.Do(func() {
 			mcp_controller = &LlmInteractionController{
 				Usecase: usecase,
-				Mcp:     mcp,
 			}
 		})
 	}
@@ -78,7 +77,8 @@ func (m *LlmInteractionController) HandleChat(w http.ResponseWriter, r *http.Req
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	mcp_tools, err := m.Mcp.FetchTools(ctx, "http://localhost:8000")
+
+	mcp_client, err := mcpgo.NewMcpGo(ctx, "http://localhost:8000")
 	if err != nil {
 		jsonResponse.StatusInternalServerError(w, r, err)
 		return
@@ -86,7 +86,35 @@ func (m *LlmInteractionController) HandleChat(w http.ResponseWriter, r *http.Req
 	c := config.GetInstance()
 	llm_provider := ollama.GetLlmOllamaInstance(c.Ollama)
 
-	resp, err := m.Usecase.HandleSyncChat(ctx, mcp_tools, "How is the wheater in Rio de Janeiro?", llm_provider)
+	mcp_tools, err := mcp_client.FetchTools(ctx)
+	if err != nil {
+		jsonResponse.StatusInternalServerError(w, r, err)
+		return
+	}
+
+	user_prompt := "How is the wheater in Rio de Janeiro?"
+
+	tools_2_call, err := m.Usecase.ChooseToolsToCall(ctx, mcp_tools, user_prompt, llm_provider)
+	if err != nil {
+		jsonResponse.StatusInternalServerError(w, r, err)
+		return
+	}
+
+	var tool_response string
+
+	for _, tool := range tools_2_call {
+		tool_result, err := mcp_client.CallTool(ctx, tool["name"].(string), tool["arguments"].(map[string]interface{}))
+		if err != nil {
+			fmt.Printf("failed to call tool %s: %s \n", tool["name"].(string), err)
+			continue
+		}
+
+		for _, item := range tool_result {
+			tool_response += item + "\n"
+		}
+	}
+
+	resp, err := m.Usecase.HandleSyncChat(ctx, user_prompt, tool_response, llm_provider)
 	if err != nil {
 		jsonResponse.StatusInternalServerError(w, r, err)
 		return

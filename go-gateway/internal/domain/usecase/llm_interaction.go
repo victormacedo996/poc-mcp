@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -88,16 +89,34 @@ func (m *LlmInteraction) HandleCAsynchat(prompt string, llm_provider llm.LLM) (<
 	return out_chan, err_chan
 }
 
-func (m *LlmInteraction) HandleSyncChat(ctx context.Context, mcp_tools []string, prompt string, llm_provider llm.LLM) (string, error) {
+func (m *LlmInteraction) ChooseToolsToCall(ctx context.Context, mcp_tools []string, prompt string, llm_provider llm.LLM) ([]map[string]interface{}, error) {
 
 	tool_prompt := fmt.Sprintf(m.TotalPrompt, mcp_tools, prompt)
 
 	resp, err := llm_provider.SyncChat(tool_prompt)
 	if err != nil {
+		return nil, err
+	}
+
+	var tools_to_call []map[string]interface{}
+
+	if err := json.Unmarshal([]byte(resp), &tools_to_call); err != nil {
+		return nil, err
+	}
+
+	return tools_to_call, nil
+}
+
+func (m *LlmInteraction) HandleSyncChat(ctx context.Context, user_prompt string, mcp_tools string, llm_provider llm.LLM) (string, error) {
+	prompt := fmt.Sprintf(m.FinalPrompt, user_prompt, mcp_tools, user_prompt)
+
+	resp, err := llm_provider.SyncChat(prompt)
+	if err != nil {
 		return "", err
 	}
 
 	return resp, nil
+
 }
 
 func (m *LlmInteraction) asyncChatLoop(prompt string, llmProvider llm.LLM, out_chan chan<- string, err_chan chan<- error, token_count_chan chan<- int) {
